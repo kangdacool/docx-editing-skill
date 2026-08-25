@@ -109,6 +109,13 @@ db = Document(tmp / "b.docx")
 check("브리프는 격자표를 쓴다(장르가 다르다)",
       db.tables[0].style.name == "Table Grid", db.tables[0].style.name)
 
+print("\n=== 선택적 의존성 -- 소스 검사 ===")
+bb = (HERE / "brief_builder.py").read_text(encoding="utf-8")
+check("Pillow를 최상단에서 import하지 «않는다»",
+      not re.search(r"^from PIL import|^import PIL", bb, re.M),
+      "표만 쓰려는 호출까지 죽는다. 2026-08-25 Linux CI 실패의 원인 -- "
+      "Windows에는 Pillow가 있어 로컬 통과와 CI 통과가 갈렸다")
+
 print("\n=== 렌더러 -- 소스 검사 ===")
 src = (HERE / "docx_kit.py").read_text(encoding="utf-8")
 check("DispatchEx를 쓴다", re.search(r"win32\.DispatchEx\(", src) is not None)

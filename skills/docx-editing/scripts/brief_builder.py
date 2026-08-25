@@ -26,7 +26,9 @@ from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
-from PIL import Image
+# ⚠️ PIL 은 «그림을 넣을 때만» 필요하다. 최상단에서 import 하면 Pillow 없는 환경에서
+#    표만 쓰려는 호출까지 죽는다 -- 2026-08-25 Linux CI 가 그렇게 실패했다
+#    (Windows 에는 Pillow 가 깔려 있어 로컬 통과와 CI 통과가 갈렸다).
 
 DARK_BLUE = RGBColor(0x1F, 0x4E, 0x79)
 WHITE     = RGBColor(0xFF, 0xFF, 0xFF)
@@ -251,6 +253,7 @@ def figure(doc, path, caption, max_w_cm=15.0, max_h_cm=21.0):
     path = str(path)
     if not os.path.exists(path):
         body(doc, f"[missing figure: {path}]"); return
+    from PIL import Image                    # 호출 시점 import (머리말 참조)
     w, h = Image.open(path).size
     width = Cm(max_w_cm); height = Cm(max_w_cm * h / w)
     if height > Cm(max_h_cm):
