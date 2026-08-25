@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# docx working files / self-check artifacts
+*.docx.bak
+BACKUP_*.docx
+~$*.docx
+*_render/
+*.pdf
+*.png
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

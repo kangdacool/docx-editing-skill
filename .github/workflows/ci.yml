@@ -1,0 +1,20 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps
+        run: pip install python-docx
+      - name: Run selftest (마크다운 문단·굵게·저널 표 세로줄·렌더 Dispatch)
+        run: python skills/docx-editing/scripts/docx_kit_selftest.py
