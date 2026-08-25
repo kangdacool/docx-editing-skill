@@ -29,24 +29,53 @@ from docx_kit import render_markdown, add_journal_table, brief_table, render_doc
 
 ⚠️ **기계 고정 경로(`D:\...`)를 쓰지 않는다.** 형제 스킬의 소비자도 `expanduser`를 쓴다.
 
-`scripts/` 안에 전부 있다 — `docx_kit.py`(진입점) · `md_to_docx.py` · `manuscript_table.py`
-· `brief_builder.py`. `docx_kit.py` 머리말에 쓰는 법과 함정이 있으니 **직접 짜기 전에
-그 파일을 연다.**
+`scripts/` 안에 전부 있다 — `docx_kit.py`(진입점) · `document_shell.py`(골격) ·
+`md_to_docx.py` · `manuscript_table.py` · `brief_builder.py`. `docx_kit.py` 머리말에
+쓰는 법과 함정이 있으니 **직접 짜기 전에 그 파일을 연다.**
 
 > *(내력)* 2026-08-25까지 이 코드는 스킬 밖의 공용 도구 폴더에 있었다. 형제(hwpx·pptx)와 달랐고, 그래서
 > 못 찾아 다시 짰다. 옛 경로에는 **얇은 shim만** 남아 있다(기존 import 보호용) —
 > 새 코드는 위 경로로 직접 가져온다.
 
-## 2. 장르가 표를 정한다 — 틀리면 표 전체를 다시 짠다
+## 2. 장르가 골격과 표를 정한다 — 틀리면 문서 전체를 다시 짠다
 
-| 장르 | 표 | 특징 |
+**먼저 이 표에서 자기 장르를 찾는다.** 골격이 있으면 골격부터 부른다.
+
+| 장르 | 골격 | 표 |
 |---|---|---|
-| 저널 투고 원고·전시물 구성안 | `add_journal_table` | 세로줄 없음·색 없음, 제목은 표 **위**, 각주는 **아래** |
-| 국문 브리프·사례보고서 | `brief_table` | 격자·색 헤더가 **의도된** 디자인 |
-| 자유서식 문서 | `render_markdown` | `.md`를 그대로 읽히게 |
+| 저널 투고 원고 (totale) | **`manuscript_shell`** | `add_journal_table` |
+| 연구요약·브리프·사례보고서 | **`brief_shell`** | `brief_table` |
+| 전시물 구성안 (표·그림만) | — (부품) | `add_journal_table` |
+| 정부·감독자 보고서 | — (부품) | `brief_table` |
+| 수업자료·문항·케이스 | — (부품) | 장르별 |
+| 공부문서·가이드 (자유서식) | `render_markdown` 자체가 골격 | — |
 
 ⚠️ 「보기 좋으니까」로 고르지 않는다. **원고에 격자 표를 넣으면 저널 관습 위반이고,
 브리프에 저널 표를 넣으면 밋밋해 보이는 게 아니라 정보가 덜 보인다.**
+
+### 골격이 왜 따로 있나 — 부품만으로는 안 멈췄다
+
+실측(2026-08-25): docx를 만드는 스크립트 **64개 중 kit을 쓴 것은 11개**였고, 직접 짠 53개 중
+**51개가 「굵게 처리」를 다시 짰다** — kit에 있는데도. 부품이 모자란 게 아니라 **골격을 아무도
+안 줘서** 매번 표지·쪽나눔·표번호·캡션·게이트를 처음부터 엮다가 부품까지 다시 짠 것이다.
+같은 골격의 원고 totale 빌더가 **7개**(254~741줄)로 흩어져 있었다.
+
+```python
+res = manuscript_shell(
+    out, TITLE, "manuscript/sections/*.md",
+    cover=review_cover,          # 검토 표지 — 쪽을 끊어 붙으므로 투고 시 통째로 뺀다
+    abstract=abstract_md,
+    tables=[(caption, rows, widths)], figures=[(caption, path)],
+    values=VALUES,               # 미치환이면 GateError로 «멈춘다»
+    word_limit=5000, no_count=("06_declarations",),
+)
+print(res["body_words"], res["refs"])   # 보고는 호출자가 한다
+```
+
+**골격이 없는 장르는 «측정하지 않아서» 없다.** 같은 골격이 셋 이상 반복되는 것이 보이면
+그때 `document_shell.py`로 올린다 — 그 파일이 생긴 근거가 그것이다.
+
+⚠️ **골격은 문장을 만들지 않는다.** 산문은 사람이 쓰고 골격은 배치·번호·게이트만 맡는다.
 
 ## 3. 숫자는 타이핑하지 않는다
 

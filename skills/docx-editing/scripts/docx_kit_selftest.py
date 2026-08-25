@@ -66,6 +66,49 @@ check("세로줄을 «넣지 않는다»(저널 관습)",
       'w:val="single"' not in _borders.split("insideV")[1][:200]
       if "insideV" in _borders else True)
 
+print("\n=== 골격 (manuscript_shell / brief_shell) ===")
+import tempfile                                            # noqa: E402
+from docx_kit import GateError, brief_shell, manuscript_shell  # noqa: E402
+
+tmp = Path(tempfile.mkdtemp())
+SEC = [("Introduction", "Depression affects {{n}} patients.\n산문이 이어진다."),
+       ("Methods", "We measured **CIST**.\n\n둘째 문단.")]
+
+res = manuscript_shell(tmp / "m.docx", "제목", SEC, values={"n": "582"},
+                       abstract="OBJECTIVES: x", cover="검토용 표지",
+                       tables=[("기저 특성", [["항목", "값"], ["가", "1"]], [2.0, 1.0])],
+                       word_limit=100)
+d = Document(tmp / "m.docx")
+alltext = "\n".join(p.text for p in d.paragraphs)
+check("자리표시자를 치환한다", "582" in alltext and "{{n}}" not in alltext)
+check("표를 저널 표로 붙인다", len(d.tables) == 1)
+check("표 제목이 표 «위»에 온다", "Table 1. 기저 특성" in alltext)
+check("별표를 글자로 남기지 «않는다»", "**" not in alltext)
+check("본문 단어를 센다", res["body_words"] > 0 and res["body_words"] <= 100)
+
+try:
+    manuscript_shell(tmp / "x.docx", "t", [("S", "{{없는키}}")], values={})
+    check("미치환이면 «멈춘다»", False, "GateError가 안 났다")
+except GateError:
+    check("미치환이면 «멈춘다»", True)
+
+try:
+    manuscript_shell(tmp / "x.docx", "t", [("S", "word " * 50)], word_limit=10)
+    check("단어 상한을 넘으면 «멈춘다»", False, "GateError가 안 났다")
+except GateError:
+    check("단어 상한을 넘으면 «멈춘다»", True)
+
+res2 = manuscript_shell(tmp / "r.docx", "t",
+                        [("S", "claim [REF: 미검증 메타분석] 뒤 문장")])
+check("미검증 참고문헌을 «센다»", len(res2["refs"]) == 1, f"{res2['refs']}")
+check("[REF:]를 단어 수에서 뺀다", res2["body_words"] == 3, f"{res2['body_words']}")
+
+brief_shell(tmp / "b.docx", "브리프", [("h", "1. 개요"), ("md", "본문."),
+                                       ("table", "표 1", [["a", "b"], ["1", "2"]])])
+db = Document(tmp / "b.docx")
+check("브리프는 격자표를 쓴다(장르가 다르다)",
+      db.tables[0].style.name == "Table Grid", db.tables[0].style.name)
+
 print("\n=== 렌더러 -- 소스 검사 ===")
 src = (HERE / "docx_kit.py").read_text(encoding="utf-8")
 check("DispatchEx를 쓴다", re.search(r"win32\.DispatchEx\(", src) is not None)

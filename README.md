@@ -53,11 +53,41 @@ skills/docx-editing/
 │   └── docx-conventions.md               저널 표 규칙 · 렌더 함정 · 숫자 게이트
 └── scripts/
     ├── docx_kit.py                       ★ 단 하나의 진입점 (재수출 + 렌더)
+    ├── document_shell.py                  ★ 골격 — manuscript_shell · brief_shell
     ├── md_to_docx.py                     마크다운 → docx (문단 합치기·굵게·목록·표)
     ├── manuscript_table.py               저널 3선표 (세로줄 없음)
     ├── brief_builder.py                  브리프 표 (격자·색 헤더)
     └── docx_kit_selftest.py              절반이 «하지 않는 것»을 증명한다
 ```
+
+### 부품이 아니라 «골격»부터
+
+부품만 모아 두면 안 멈춥니다. 실측(2026-08-25, 한 연구 환경의 스크립트 전수):
+docx를 만드는 스크립트 **64개 중 툴킷을 쓴 것은 11개**였고, 직접 짠 53개 중 **51개가
+「굵게 처리」를 다시 짰습니다** — 툴킷에 있는데도. 부품이 모자라서가 아니라 **골격이
+없어서** 매번 표지·쪽나눔·표번호·캡션·게이트를 처음부터 엮다가 부품까지 다시 짠 것입니다.
+같은 골격의 원고 빌더가 **7개**(254~741줄)로 흩어져 있었습니다.
+
+```python
+res = manuscript_shell(
+    "out/manuscript.docx", TITLE, "sections/*.md",
+    cover=review_cover,          # 검토 표지 — 쪽을 끊어 붙으므로 투고 시 통째로 뺀다
+    abstract=abstract_md,
+    tables=[(caption, rows, widths)], figures=[(caption, path)],
+    values=VALUES,               # 미치환이면 GateError로 «멈춘다»
+    word_limit=5000, no_count=("06_declarations",),
+)
+print(res["body_words"], res["refs"])    # 보고는 호출자가 한다
+```
+
+| 장르 | 골격 | 표 |
+|---|---|---|
+| 저널 투고 원고 | `manuscript_shell` | `add_journal_table` |
+| 연구요약·브리프 | `brief_shell` | `brief_table` |
+| 자유서식 문서 | `render_markdown` | — |
+
+**골격이 없는 장르는 «측정하지 않아서» 없습니다.** 같은 골격이 셋 이상 반복되는 것이
+확인되면 그때 올립니다 — 넘겨짚어 만든 골격은 안 맞습니다.
 
 ### 설치
 
@@ -77,7 +107,9 @@ python ~/.claude/skills/docx-editing/scripts/docx_kit_selftest.py
 import os, sys
 sys.path.insert(0, os.path.expanduser(
     os.path.join("~", ".claude", "skills", "docx-editing", "scripts")))
-from docx_kit import render_markdown, add_journal_table, brief_table, render_docx
+from docx_kit import (manuscript_shell, brief_shell,          # 골격
+                      render_markdown, add_journal_table,     # 부품
+                      brief_table, render_docx)
 
 from docx import Document
 doc = Document()
@@ -154,12 +186,21 @@ Agents that don't read `SKILL.md` can use `scripts/` as a plain library.
 ### Use
 
 ```python
-from docx_kit import render_markdown, add_journal_table, brief_table, render_docx
+from docx_kit import manuscript_shell, brief_shell, render_markdown, add_journal_table
 ```
 
-One entry point. `render_markdown` for prose, `add_journal_table` for manuscripts (no vertical
-rules, caption above, notes below), `brief_table` for reports where a grid is the intended design,
-`render_docx` to look at the result page by page.
+One entry point, two layers. **Shells** (`manuscript_shell`, `brief_shell`) own the layout —
+cover page, page breaks, table numbering, figure captions, and the gates that stop the build.
+**Parts** (`render_markdown`, `add_journal_table`, `brief_table`, `render_docx`) are what shells
+are made of, for genres that don't have one yet.
+
+Measured across one research environment's 64 docx-building scripts: only 11 used the toolkit, and
+**51 of the 53 that didn't had re-implemented bold-text handling** — which the toolkit already had.
+Parts alone don't stop the rebuilding; a missing shell is what sends people back to first
+principles every time.
+
+Genres without a shell don't have one **because we didn't measure them**. A shell gets added when
+the same layout shows up three times or more — not on a guess.
 
 ### The four rules
 

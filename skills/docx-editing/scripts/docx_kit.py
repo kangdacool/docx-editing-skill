@@ -19,6 +19,14 @@
 **교훈은 그 일을 하는 «단 하나의 도구» 안에 산다.** 길이 하나면 틀릴 길이 없다.
 지식을 다른 곳에 또 적지 않는다 -- 여기 있는 것이 전부이고, 나머지는 가리킨다.
 
+부품이냐 골격이냐
+────────────────
+    부품  render_markdown · add_journal_table · brief_table · render_docx
+    골격  manuscript_shell(원고 totale) · brief_shell(국문 브리프)
+          -- 표지·쪽나눔·표번호·그림캡션·게이트까지 «배치»를 맡는다.
+2026-08-25 실측: 부품만 있을 때 64개 빌더 중 11개만 kit을 썼고, 직접 짠 53개 중
+51개가 «굵게 처리»를 다시 짰다. 골격이 없어 매번 처음부터 엮었기 때문이다.
+
 장르 → 표 모듈 (틀리면 표 전체를 다시 짠다)
 ──────────────────────────────────────────
     저널 투고 원고·구성안   `add_journal_table`   세로줄 없음 · 색 없음 ·
@@ -41,9 +49,13 @@ if str(_HERE) not in sys.path:
 # ── 재수출: 이미 있는 것을 다시 짜지 않는다 ──────────────────────────────────
 from md_to_docx import add_runs, render_markdown, unwrap            # noqa: E402,F401
 from manuscript_table import add_journal_table                      # noqa: E402,F401
+# 골격 -- 부품 위의 한 층. 장르가 반복되면 여기로 올라온다.
+from document_shell import (GateError, brief_shell,                 # noqa: E402,F401
+                           fill_values, manuscript_shell)
 
 __all__ = ["add_runs", "unwrap", "render_markdown", "add_journal_table",
-           "render_docx", "brief_table"]
+           "render_docx", "brief_table",
+           "manuscript_shell", "brief_shell", "fill_values", "GateError"]
 
 
 def brief_table(*a, **k):
