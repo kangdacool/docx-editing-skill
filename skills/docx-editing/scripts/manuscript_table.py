@@ -47,6 +47,8 @@ __all__ = [
 
 DEFAULT_FONT = "Times New Roman"
 P_HEADER_RE = re.compile(r"^p[ -]?(value)?$", re.I)
+# "1.632 (1.440-1.850)" and "1.00 (ref)" are estimates; "18,952", "3-4" and "26.9" are not.
+ESTIMATE_RE = re.compile(r"^-?\d[\d,.]*\s*\(.+\)\s*\**$")
 
 
 # ---------------------------------------------------------------------------
@@ -72,9 +74,15 @@ def significance_notation(rows):
     """Reduce significance marking to what the table actually needs.
 
     Returns `(rows, legend)`. With several levels present, stars stay and the
-    legend lists only those levels. When every marked estimate carries the SAME
-    level the stars add nothing a sentence cannot: they are stripped and the
-    legend states the level.
+    legend lists only those levels. When ONE level is present AND every estimate
+    in the table carries it, the stars add nothing a sentence cannot: they are
+    stripped and the legend states the level for all of them.
+
+    ⚠️ The universal claim is only made when it is true. A table where one level
+    is present but some estimates are unmarked - a cause-specific table with a
+    null cancer row, say - keeps its stars and gets `* p<0.001.` instead. The
+    earlier version stripped on level-count alone and printed "All estimates
+    p<0.001." underneath a confidence interval spanning 1.00 (2026-08-29).
 
     Note the `rstrip()` - leading spaces are a row's indent, not padding, and
     stripping them silently flattens the table's hierarchy."""
@@ -86,9 +94,15 @@ def significance_notation(rows):
         return rows, ""
     if len(present) > 1:
         return rows, ", ".join(sym + lvl for sym, lvl in present) + "."
-    _, lvl = present[0]
-    stripped = [[re.sub(r"\*+$", "", str(c).rstrip()) for c in r] for r in rows]
-    return stripped, "All estimates %s." % lvl
+    sym, lvl = present[0]
+    # An estimate is a cell carrying a number and a parenthesised interval; a count, an N or a
+    # percentage is not one, and must not decide whether the stars can go.
+    est = [str(c).rstrip() for r in rows[1:] for c in r
+           if ESTIMATE_RE.match(str(c).strip())]
+    if est and all(c.endswith(sym) for c in est):
+        stripped = [[re.sub(r"\*+$", "", str(c).rstrip()) for c in r] for r in rows]
+        return stripped, "All estimates %s." % lvl
+    return rows, "%s %s." % (sym, lvl)
 
 
 def strip_footnote_rows(rows):

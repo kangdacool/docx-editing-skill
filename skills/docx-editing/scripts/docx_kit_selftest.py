@@ -66,6 +66,34 @@ check("세로줄을 «넣지 않는다»(저널 관습)",
       'w:val="single"' not in _borders.split("insideV")[1][:200]
       if "insideV" in _borders else True)
 
+print("\n=== significance_notation ===")
+from manuscript_table import significance_notation             # noqa: E402
+
+_all_starred = [["노출", "HR"],
+                ["가", "1.63 (1.44-1.85) ***"],
+                ["나", "1.73 (1.41-2.11) ***"]]
+_rows, _legend = significance_notation(_all_starred)
+check("전부 같은 수준이면 별표를 떼고 한 문장으로",
+      "***" not in " ".join(c for r in _rows for c in r) and _legend == "All estimates p<0.001.",
+      f"실제 legend={_legend!r}")
+
+# 회귀(2026-08-29): 유의하지 않은 추정치가 섞이면 «전부»라고 말하면 안 된다.
+_mixed = [["사인", "HR"],
+          ["심혈관", "1.91 (1.49-2.45) ***"],
+          ["암", "1.20 (0.95-1.53)"]]
+_rows, _legend = significance_notation(_mixed)
+check("귀무 추정치가 섞이면 «전부»라고 «말하지 않는다»",
+      _legend == "*** p<0.001." and "***" in " ".join(c for r in _rows for c in r),
+      f"실제 legend={_legend!r} -- 1.00을 걸친 CI 밑에 'All estimates'가 붙으면 거짓말이다")
+
+# N·백분율은 추정치가 아니므로 별표를 뗄지 말지를 결정해서는 안 된다.
+_with_counts = [["변수", "N", "HR"],
+                ["가", "18,952", "1.63 (1.44-1.85) ***"],
+                ["나", "5,855", "1.73 (1.41-2.11) ***"]]
+_rows, _legend = significance_notation(_with_counts)
+check("N 열이 판정을 바꾸지 «않는다»", _legend == "All estimates p<0.001.",
+      f"실제 legend={_legend!r}")
+
 print("\n=== 골격 (manuscript_shell / brief_shell) ===")
 import tempfile                                            # noqa: E402
 from docx_kit import GateError, brief_shell, manuscript_shell  # noqa: E402

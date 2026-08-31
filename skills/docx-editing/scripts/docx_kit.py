@@ -21,7 +21,7 @@
 
 부품이냐 골격이냐
 ────────────────
-    부품  render_markdown · add_journal_table · brief_table · render_docx
+    부품  render_markdown · add_journal_table · brief_table · render_docx · page_count
     골격  manuscript_shell(원고 totale) · brief_shell(국문 브리프)
           -- 표지·쪽나눔·표번호·그림캡션·게이트까지 «배치»를 맡는다.
 2026-08-25 실측: 부품만 있을 때 64개 빌더 중 11개만 kit을 썼고, 직접 짠 53개 중
@@ -54,7 +54,7 @@ from document_shell import (GateError, brief_shell,                 # noqa: E402
                            fill_values, manuscript_shell)
 
 __all__ = ["add_runs", "unwrap", "render_markdown", "add_journal_table",
-           "render_docx", "brief_table",
+           "render_docx", "page_count", "brief_table",
            "manuscript_shell", "brief_shell", "fill_values", "GateError"]
 
 
@@ -62,6 +62,64 @@ def brief_table(*a, **k):
     """국문 브리프용 격자 표. 저널 원고에는 쓰지 않는다(장르가 다르다)."""
     from brief_builder import data_table
     return data_table(*a, **k)
+
+
+def _to_pdf(src):
+    """docx → PDF. (임시 docx, PDF) 경로를 돌려준다 — 둘 다 부른 쪽이 지운다.
+
+    render_docx 와 page_count 가 같은 경로를 쓰게 하려고 뽑았다. `DispatchEx` 과
+    «사본을 연다» 는 두 규칙이 한 곳에만 있어야 한 쪽이 빠지지 않는다(render_docx 주석 참고).
+    """
+    import win32com.client as win32
+
+    src = Path(src).resolve()
+    tmp = Path(tempfile.gettempdir()) / ("_dk_" + src.name)
+    shutil.copy2(src, tmp)
+    pdf = tmp.with_suffix(".pdf")
+
+    word = win32.DispatchEx("Word.Application")     # ⚠️ Ex -- render_docx 주석 참고
+    word.Visible = False
+    try:
+        doc = word.Documents.Open(str(tmp), ReadOnly=True, AddToRecentFiles=False)
+        doc.SaveAs(str(pdf), FileFormat=17)         # 17 = PDF
+        doc.Close(False)
+    finally:
+        word.Quit()
+    return tmp, pdf
+
+
+def page_count(*srcs):
+    """쪽수만 센다 — PNG 를 만들지 않는다. [(이름, 쪽, 표, 표칸수), ...] 반환.
+
+    «분량이 긴가» 는 혼자서는 답이 안 나온다. 여러 파일을 한 번에 받게 한 것은 그 때문이다 —
+    같은 과목의 다른 산출물·이전 판을 같은 줄에 놓고 본다.
+    ⚠ 그러려면 비교 대상이 «같은 규칙으로 만들어졌는가» 를 먼저 확인해야 한다. 표 칸수를
+    함께 내는 이유가 그것이다 — 표가 2개인 문서와 20개인 문서는 쪽수를 비교할 사이가 아니다.
+    (2026-08-28 실측: 5쪽짜리 «동료 문서» 셋을 21쪽 문서 옆에 놓았는데, 그것들은 표가 2개인
+     다른 골격의 문서였다. «우리 것이 너무 길다» 는 거짓 결론을 그 표가 만들었다.)
+    """
+    import fitz
+    from docx import Document
+
+    out = []
+    for src in srcs:
+        src = Path(src)
+        if not src.exists():
+            out.append((src.name, None, None, None))
+            continue
+        tmp, pdf = _to_pdf(src)
+        with fitz.open(pdf) as d:
+            n = d.page_count
+        dx = Document(str(src))
+        tbl = len(dx.tables)
+        cells = sum(len(t.rows) * len(t.columns) for t in dx.tables)
+        for f in (tmp, pdf):
+            try:
+                f.unlink()
+            except OSError:
+                pass
+        out.append((src.name, n, tbl, cells))
+    return out
 
 
 def render_docx(src, out_dir=None, dpi=110):
@@ -81,25 +139,12 @@ def render_docx(src, out_dir=None, dpi=110):
     ⚠️ 원본을 직접 열지 않고 임시 사본을 연다 -- 동기화·다른 Word가 잡고 있으면
        원본 열기가 실패하고, 원본에 잠금/최근문서 흔적을 남기지 않는 편이 낫다.
     """
-    import win32com.client as win32
     import fitz
 
     src = Path(src).resolve()
     out = Path(out_dir) if out_dir else src.parent / "_render"
     out.mkdir(parents=True, exist_ok=True)
-
-    tmp = Path(tempfile.gettempdir()) / ("_dk_" + src.name)
-    shutil.copy2(src, tmp)
-    pdf = tmp.with_suffix(".pdf")
-
-    word = win32.DispatchEx("Word.Application")     # ⚠️ Ex -- 위 주석 참고
-    word.Visible = False
-    try:
-        doc = word.Documents.Open(str(tmp), ReadOnly=True, AddToRecentFiles=False)
-        doc.SaveAs(str(pdf), FileFormat=17)         # 17 = PDF
-        doc.Close(False)
-    finally:
-        word.Quit()
+    tmp, pdf = _to_pdf(src)
 
     made = []
     with fitz.open(pdf) as d:
@@ -116,7 +161,12 @@ def render_docx(src, out_dir=None, dpi=110):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
+    if len(sys.argv) > 2 and sys.argv[1] == "--pages":
+        print("%-46s %5s %5s %8s" % ("", "쪽", "표", "표칸수"))
+        for name, n, t, c in page_count(*sys.argv[2:]):
+            print("%-46s %5s %5s %8s" % (name[:46], n if n is not None else "없음",
+                                         t if t is not None else "-", c if c is not None else "-"))
+    elif len(sys.argv) > 1:
         for p in render_docx(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else None):
             print(p)
     else:

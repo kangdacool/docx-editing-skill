@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Kang Lab Research Brief builder — SHARED python-docx helpers (canonical).
 
-Usage from a project's create_research_brief.py:
-    import sys; sys.path.insert(0, r"D:\\onedrive\\claude\\agent\\tools")
+Usage from a project's create_research_brief.py — resolve this directory, never hardcode it:
+    import sys, pathlib
+    sys.path.insert(0, str(pathlib.Path.home() / ".claude" / "skills" /
+                           "docx-editing" / "scripts"))
     from brief_builder import (new_doc, title_block, h1, h2, body, bullet, gap,
                                info_table, data_table, csv_table, figure, page_break)
     doc = new_doc()
