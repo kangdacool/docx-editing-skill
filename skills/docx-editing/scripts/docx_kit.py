@@ -34,6 +34,15 @@
     국문 브리프·사례보고서  `brief_builder.data_table`  격자·색 헤더가 «의도된» 디자인
     자유서식 문서           `render_markdown`     .md 를 그대로 읽히게
 
+표 열 폭 — widths 를 안 주면 이제 두 표 모듈 다 «내용 비례»가 기본값 (2026-09-09)
+──────────────────────────────────────────
+    균등 분할 금지("표 width 는 내가 맨날 하는 말" — 사용자가 표 12개를 손으로
+    재배분한 날 코드가 됐다). 명시적 widths 인자가 언제나 이긴다. 계산기는 장르별 둘:
+      저널 표(영문)   `manuscript_table.col_widths_for`   문자수·감쇠·water-filling
+      국문·격자 표    `col_widths.content_col_widths`     CJK 표시폭·snug/지배·균등 유지
+    새 국문 빌더를 직접 짜면 `from col_widths import content_col_widths` 를 쓴다 —
+    ⚠ 두 함수를 합치거나 서로 바꿔 쓰지 말 것(col_widths.py 머리말의 판정 참조).
+
 만든 뒤에는 반드시 «렌더해서 눈으로» 본다 -- render_docx(). 구조 검사로 안 잡히고
 렌더에서만 보이는 결함이 있다. 조판 규율의 근거는 references/docx-conventions.md.
 """
@@ -47,13 +56,16 @@ if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
 # ── 재수출: 이미 있는 것을 다시 짜지 않는다 ──────────────────────────────────
-from md_to_docx import add_runs, render_markdown, unwrap            # noqa: E402,F401
+from md_to_docx import (add_runs, manuscript_typography, render_markdown,  # noqa: E402,F401
+                        unwrap)
 from manuscript_table import add_journal_table                      # noqa: E402,F401
+from col_widths import content_col_widths, doc_text_width_cm        # noqa: E402,F401
 # 골격 -- 부품 위의 한 층. 장르가 반복되면 여기로 올라온다.
 from document_shell import (GateError, brief_shell,                 # noqa: E402,F401
                            fill_values, manuscript_shell)
 
-__all__ = ["add_runs", "unwrap", "render_markdown", "add_journal_table",
+__all__ = ["add_runs", "unwrap", "render_markdown", "manuscript_typography",
+           "add_journal_table", "content_col_widths", "doc_text_width_cm",
            "render_docx", "page_count", "brief_table",
            "manuscript_shell", "brief_shell", "fill_values", "GateError"]
 

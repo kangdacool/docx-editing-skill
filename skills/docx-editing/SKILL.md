@@ -33,6 +33,19 @@ from docx_kit import render_markdown, add_journal_table, brief_table, render_doc
 `md_to_docx.py` · `manuscript_table.py` · `brief_builder.py`. `docx_kit.py` 머리말에
 쓰는 법과 함정이 있으니 **직접 짜기 전에 그 파일을 연다.**
 
+⚠ **표를 손질하는 함수는 `docx_kit.py`가 아니라 `manuscript_table.py`에 있다.** 이름만 알아
+두면 다시 짜지 않는다 — `repeat_header_row`(쪽 넘어갈 때 머리글 반복. ⚠ 표가 아니라 «행»을
+받는다) · `no_row_split` · `set_journal_borders` · `set_row_bottom_rule` · `set_cell_margins` ·
+`col_widths_for` · `add_journal_table`. **2026-09-08 에 `repeat_header_row` 가 없는 줄 알고
+다시 짰고, 2026-09-09 에는 `col_widths_for` 를 못 보고 열 폭 계산을 절반쯤 다시 짰다**(이
+목록에 있었는데도) — 아래 내력의 2026-08-25 와 같은 실수가 반복된다.
+진입점만 가리키는 포인터로는 «다른 파일에 있는» 함수를 못 찾는다.
+
+⚠ **표 열 폭은 widths 를 안 줘도 «내용 비례»가 기본값이다**(2026-09-09 — "표 width 는 내가
+맨날 하는 말"이라는 사용자 반복 지적의 코드화). 저널 표 = `col_widths_for`(영문·문자수),
+국문·격자 표 = `col_widths.content_col_widths`(CJK 표시폭·균등 유지 판정). 장르가 달라
+**합치지 말 것** — 판정 근거는 `scripts/col_widths.py` 머리말.
+
 > *(내력)* 2026-08-25까지 이 코드는 스킬 밖의 공용 도구 폴더에 있었다. 형제(hwpx·pptx)와 달랐고, 그래서
 > 못 찾아 다시 짰다. 옛 경로에는 **얇은 shim만** 남아 있다(기존 import 보호용) —
 > 새 코드는 위 경로로 직접 가져온다.
@@ -48,7 +61,15 @@ from docx_kit import render_markdown, add_journal_table, brief_table, render_doc
 | 전시물 구성안 (표·그림만) | — (부품) | `add_journal_table` |
 | 정부·감독자 보고서 | — (부품) | `brief_table` |
 | 수업자료·문항·케이스 | — (부품) | 장르별 |
+| **학회 초록** | **`manuscript_typography` → `render_markdown`** | — |
 | 공부문서·가이드 (자유서식) | `render_markdown` 자체가 골격 | — |
+
+⚠️ **학회 초록은 «원고처럼» 낸다 — 흑백, 한 서체, 군더더기 여백 없음.**
+`render_markdown` 은 Word 기본 Heading 스타일을 쓰는데 그것은 **파란 산세리프**다. 그래서
+`manuscript_typography(doc)` 를 **`render_markdown` 앞에** 부른다(2026-09-03 사용자 지시:
+*"학회용 초록파일 작성은 원고처럼 작성해. 앞으로도."*). Heading 은 글꼴을 «테마»로 참조하므로
+그 함수가 테마 속성을 먼저 지운다 — 안 지우면 본문만 바뀌고 제목은 산세리프로 남는다.
+⛔ 접수 절차·분량 규정 같은 «작업 메모»를 초록 파일 표면에 남기지 않는다. 그대로 첨부돼 나간다.
 
 ⚠️ 「보기 좋으니까」로 고르지 않는다. **원고에 격자 표를 넣으면 저널 관습 위반이고,
 브리프에 저널 표를 넣으면 밋밋해 보이는 게 아니라 정보가 덜 보인다.**

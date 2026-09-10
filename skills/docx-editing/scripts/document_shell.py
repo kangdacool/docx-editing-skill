@@ -42,6 +42,11 @@ __all__ = ["manuscript_shell", "brief_shell", "fill_values", "GateError"]
 #    원고에 인쇄된다. 게이트가 막으라는 바로 그 실패다(2026-08-25 셀프테스트가 잡음).
 PLACEHOLDER = re.compile(r"\{\{\s*([^{}\n]+?)\s*\}\}")
 REF_MARK = re.compile(r"\[REF:\s*([^\]]+)\]")
+## 표 «셀»은 마크다운으로 렌더되지 않는다 -- 별표가 글자로 남는다(2026-09-03 실측)
+MD_IN_CELL = re.compile(r"\*\*[^*\n]+\*\*")
+## 이중꺾쇠는 «작업노트» 표기다 -- 산출물에 새어 나오면 감사가 잡는다.
+## 노트에서는 정당하므로 습관이 옮겨붙는다. 그래서 조립하는 자리에서 막는다.
+GUILLEMET = re.compile(r"[\u00ab\u00bb]")
 
 
 class GateError(RuntimeError):
@@ -70,6 +75,30 @@ def fill_values(text, values, where=""):
     return out
 
 
+def _fill_table(rows, values, where=""):
+    """표 «셀»을 게이트에 태운다.
+
+    마크다운 블록만 fill_values 를 거치던 시절, 표 셀에 남은 {{키}}가 그대로 «인쇄»됐다
+    (2026-09-03 실측: 회의자료·연구요약에서 두 번). 셀은 마크다운으로 렌더되지도 않으므로
+    `**굵게**`는 별표가 글자로 남는다. 둘 다 여기서 «멈춘다».
+    """
+    out = []
+    for r in rows:
+        cells = []
+        for c in r:
+            s = c if isinstance(c, str) else str(c)
+            if values is not None:
+                s = fill_values(s, values, where=where or "table cell")
+            if "{{" in s:
+                raise GateError(f"표 셀에 미치환 자리표시자: {s[:60]}")
+            if MD_IN_CELL.search(s):
+                raise GateError(
+                    f"표 셀에 마크다운이 있다(셀은 렌더되지 않는다 - 글자로 남는다): {s[:60]}")
+            cells.append(s)
+        out.append(cells)
+    return out
+
+
 def _words(text):
     """[REF: ...] 표시와 자리표시자를 뺀 «본문» 단어 수."""
     text = REF_MARK.sub("", PLACEHOLDER.sub("", text))
@@ -91,6 +120,11 @@ def _load_sections(sections, values):
             stem, title, md = p.stem, None, p.read_text(encoding="utf-8")
         if values is not None:
             md = fill_values(md, values, where=stem)
+        if GUILLEMET.search(md):
+            bad = GUILLEMET.split(md)
+            raise GateError(
+                f"산출물 절에 이중꺾쇠(<< >>)가 있다 ({stem}) -- 작업노트 표기다. "
+                f"근처: {md[max(0, GUILLEMET.search(md).start() - 40):][:90]!r}")
         items.append((stem, title, md))
     return items
 
@@ -98,7 +132,9 @@ def _load_sections(sections, values):
 # ── 골격 1: 원고 totale ────────────────────────────────────────────────────
 def manuscript_shell(out, title, sections, *, authors=None, abstract=None,
                      cover=None, tables=(), figures=(), values=None,
-                     word_limit=None, no_count=(), subtitle=None):
+                     word_limit=None, no_count=(), subtitle=None,
+                     table_caption="Table {i}. {caption}",
+                     figure_caption="Figure {i}. {caption}"):
     """원고 totale 을 조립한다. 검토용 표지는 «쪽을 끊어» 붙으므로 투고 시 통째로 뺀다.
 
     배치:  [표지] → 제목·저자 → [초록] → 본문 절 → [표] → [그림]
@@ -109,6 +145,9 @@ def manuscript_shell(out, title, sections, *, authors=None, abstract=None,
                ⚠️ col_widths(인치)를 주는 것이 기본이다 -- 안 주면 Word가 자동배분해
                라벨 열이 두 줄로 접히고 숫자 열이 반쯤 비운다
     figures    [(캡션, 이미지경로, 폭인치)] -- 폭 생략 시 6.0
+    table_caption / figure_caption
+               캡션 서식. 국문 원고는 "[표 {i}] {caption}" / "[그림 {i}] {caption}".
+               본문 인용 표기와 «같은 말»이어야 감사가 고아로 잡지 않는다
     values     {{키}} 사전. 주면 미치환 시 «멈춘다»
     word_limit 본문 단어 상한. 넘으면 «멈춘다»
     no_count   본문 단어에 세지 않을 절의 stem 들(선언·감사·참고문헌 등)
@@ -169,8 +208,10 @@ def manuscript_shell(out, title, sections, *, authors=None, abstract=None,
         for i, tb in enumerate(tables, 1):
             caption, rows = tb[0], tb[1]
             widths = tb[2] if len(tb) > 2 else None
+            rows = _fill_table(rows, values, where=f"Table {i}")
             cap = doc.add_paragraph()                      # 제목은 표 «위» (저널 관습)
-            cr = cap.add_run(f"Table {i}. {caption}" if caption else f"Table {i}")
+            cr = cap.add_run(table_caption.format(i=i, caption=caption).rstrip(". ")
+                             if caption else table_caption.format(i=i, caption="").rstrip(". "))
             cr.bold = True
             cr.font.size = Pt(10)
             cap.paragraph_format.keep_with_next = True     # 제목이 표와 떨어지지 않게
@@ -188,13 +229,39 @@ def manuscript_shell(out, title, sections, *, authors=None, abstract=None,
             pic.paragraph_format.keep_with_next = True     # 캡션이 다른 그림에 붙지 않게
             cap = doc.add_paragraph()
             cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            cr = cap.add_run(f"Figure {i}. {caption}" if caption else f"Figure {i}")
+            cr = cap.add_run(figure_caption.format(i=i, caption=caption).rstrip(". ")
+                             if caption else figure_caption.format(i=i, caption="").rstrip(". "))
             cr.font.size = Pt(9)
+
+    _add_page_numbers(doc)                          # 필수 — 원고도 예외 없음 (2026-09-03)
 
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(out))
     return {"body_words": body_words, "per_section": per_section,
             "refs": refs, "path": str(out)}
+
+
+def _add_page_numbers(doc):
+    """모든 쪽 하단 중앙 «쪽 / 전체» 번호. 브리프·연구요약 필수 규칙(2026-09-03 사용자 지시 —
+    인쇄·손편집 유통이 기본이라 쪽 번호 없는 다쪽 문서는 회의에서 참조가 안 된다)."""
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    def _field(par, instr):
+        run = par.add_run()
+        b = OxmlElement("w:fldChar"); b.set(qn("w:fldCharType"), "begin")
+        i = OxmlElement("w:instrText"); i.set(qn("xml:space"), "preserve"); i.text = instr
+        e = OxmlElement("w:fldChar"); e.set(qn("w:fldCharType"), "end")
+        run._r.append(b); run._r.append(i); run._r.append(e)
+        run.font.size = Pt(9)
+        return run
+
+    fp = doc.sections[0].footer.paragraphs[0]
+    fp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    _field(fp, "PAGE")
+    mid = fp.add_run(" / ")
+    mid.font.size = Pt(9)
+    _field(fp, "NUMPAGES")
 
 
 # ── 골격 2: 국문 브리프·사례보고서 ─────────────────────────────────────────
@@ -240,7 +307,7 @@ def brief_shell(out, title, blocks, *, subtitle=None, values=None, footer=None):
                 cr.bold = True
                 cr.font.size = Pt(10)
                 cap.paragraph_format.keep_with_next = True
-            rows = b[2]
+            rows = _fill_table(b[2], values, where=f"표: {b[1] or ''}")
             data_table(doc, rows[0], rows[1:])             # rows[0] = 헤더
             doc.add_paragraph()
         elif kind == "fig":
@@ -263,6 +330,8 @@ def brief_shell(out, title, blocks, *, subtitle=None, values=None, footer=None):
         fr = fp.add_run(footer)
         fr.font.size = Pt(8)
         fr.italic = True
+
+    _add_page_numbers(doc)                          # 필수 — 끄는 옵션을 두지 않는다
 
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(out))

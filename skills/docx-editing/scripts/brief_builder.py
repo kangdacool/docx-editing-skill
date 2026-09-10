@@ -27,7 +27,7 @@ from docx import Document
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
-from docx.shared import Cm, Pt, RGBColor
+from docx.shared import Cm, Mm, Pt, RGBColor
 # ⚠️ PIL 은 «그림을 넣을 때만» 필요하다. 최상단에서 import 하면 Pillow 없는 환경에서
 #    표만 쓰려는 호출까지 죽는다 -- 2026-08-25 Linux CI 가 그렇게 실패했다
 #    (Windows 에는 Pillow 가 깔려 있어 로컬 통과와 CI 통과가 갈렸다).
@@ -53,12 +53,21 @@ def kfont(run):
     run._element.get_or_add_rPr().get_or_add_rFonts().set(qn("w:eastAsia"), KFONT)
 
 
-def new_doc(margin_cm=2.3, body_pt=10):
-    """Fresh Document with lab-standard Normal style (Calibri + 맑은 고딕) and margins."""
+def new_doc(margin_cm=2.3, body_pt=10, paper="a4"):
+    """Fresh Document with lab-standard Normal style (Calibri + 맑은 고딕), A4 paper, margins.
+
+    ⚠ 용지를 «명시»한다. python-docx 의 기본 템플릿은 **Letter(216x279mm)** 이고, 이 함수가
+    용지를 안 잡으면 그대로 나간다. 화면에서도 PDF 로 뽑아도 렌더 PNG 로도 «안 보이고»,
+    국내에서 A4 로 인쇄할 때 3% 축소돼 여백이 어긋나야 비로소 드러난다.
+    2026-09-03 실측(insaui4): 학생 배포 문서 6종이 전부 Letter 였다 — 인쇄해 보고서야 알았다.
+    """
     doc = Document()
     st = doc.styles["Normal"]; st.font.name = "Calibri"; st.font.size = Pt(body_pt)
     st.element.get_or_add_rPr().get_or_add_rFonts().set(qn("w:eastAsia"), KFONT)
     sec = doc.sections[0]
+    w, h = {"a4": (210, 297), "letter": (215.9, 279.4), "b5": (176, 250),
+            "a3": (297, 420)}[paper]
+    sec.page_width, sec.page_height = Mm(w), Mm(h)
     sec.top_margin = sec.bottom_margin = Cm(margin_cm)
     sec.left_margin = sec.right_margin = Cm(margin_cm)
     return doc
@@ -162,10 +171,12 @@ def data_table(doc, headers, rows, fs=BODY_TABLE_PT, keep_together=False, widths
 
     The header row repeats across page breaks by default.
 
-    widths: per-column cm. Without it Word divides the width evenly, which wraps
-    long label columns onto two lines while numeric columns sit half empty. Give
-    the label column the room it needs and the number columns only what they use
-    (list should sum to the text width, ~16.99cm at the default margins).
+    widths: per-column cm (list should sum to the text width, ~16.99cm at the
+    default margins). Omitted -> content-proportional defaults from
+    col_widths.content_col_widths(): label/number columns get snug widths, the
+    longest text column absorbs the rest, near-uniform tables stay even.
+    (2026-09-09: the even split this docstring used to warn about kept shipping
+    anyway — the founder re-dragged 12 of 20 tables by hand. Rule became code.)
     """
     t = doc.add_table(rows=1 + len(rows), cols=len(headers)); t.style = "Table Grid"; t.alignment = WD_TABLE_ALIGNMENT.CENTER
     for j, hd in enumerate(headers):
@@ -176,6 +187,10 @@ def data_table(doc, headers, rows, fs=BODY_TABLE_PT, keep_together=False, widths
             cell = t.rows[i + 1].cells[j]
             rr = cell.paragraphs[0].add_run(str(val)); rr.font.size = Pt(fs); kfont(rr)
             if i % 2 == 1: set_cell_shading(cell, "F2F2F2")
+    if widths is None:
+        from col_widths import content_col_widths, doc_text_width_cm
+        widths = content_col_widths([list(headers)] + [list(r) for r in rows],
+                                    doc_text_width_cm(doc), ncols=len(headers))
     if widths:
         _set_col_widths(t, widths)
     if keep_together:
@@ -203,6 +218,9 @@ def csv_table(doc, path, fs=BODY_TABLE_PT, table1=False, widths=None, keep_toget
             rr = p.add_run(val.strip()); rr.font.size = Pt(fs); kfont(rr)
             if j == 0 and is_cat: rr.bold = True
             if j == 0 and indent: p.paragraph_format.left_indent = Cm(0.35)
+    if widths is None:
+        from col_widths import content_col_widths, doc_text_width_cm
+        widths = content_col_widths(rows, doc_text_width_cm(doc), ncols=len(hdr))
     if widths:
         _set_col_widths(t, widths)
     if keep_together:

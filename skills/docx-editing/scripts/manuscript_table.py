@@ -261,13 +261,74 @@ def _write_cell(p, text, font_size, bold=False, font=DEFAULT_FONT):
 # the one function most callers need
 # ---------------------------------------------------------------------------
 
+def col_widths_for(rows, max_width=6.3, min_col=0.80, label_cap=70, cap=40):
+    """Split `max_width` inches across the columns of `rows`. Pass the result to
+    `add_journal_table(col_widths=...)`, which asks for widths but does not
+    compute them - so every caller wrote its own and hit the same two traps.
+
+    Trap 1 - **proportional to character count starves the short columns.** One
+    prose column (a checklist item, a footnote) is 400 characters and squeezes
+    the rest to 0.1", where Word breaks a word one letter per line: "RECORD"
+    rendered as R/E/C/O/R/D down the page. So a column's weight is damped above
+    `cap` characters (`label_cap` for column 0, which is the label column and
+    legitimately wants more room), and every column is guaranteed `min_col`.
+
+    Trap 2 - **a fixed floor silently degrades to equal widths.** With 8 columns
+    and a 0.80" floor the floors alone exceed the text width, and the naive
+    guard ("if it doesn't fit, split evenly") fires - so the label column gets
+    the same width as an n column and wraps to three lines while the numeric
+    columns sit half empty. The floor therefore scales with the column count.
+
+    Both were measured on 2026-09-03 while rendering a manuscript to Word; both
+    passed every structural check and were visible only in the rendered PDF."""
+    n = max(len(r) for r in rows)
+    raw = [max((len(r[c]) if c < len(r) else 0) for r in rows) for c in range(n)]
+    caps = [label_cap] + [cap] * (n - 1)
+    w = [x if x <= caps[c] else caps[c] + (x - caps[c]) ** 0.5
+         for c, x in enumerate(max(v, 3) for v in raw)]
+
+    floor_ = min(min_col, max_width / (n + 2.0))
+    if floor_ * n >= max_width:
+        return [max_width / n] * n
+
+    out = [max_width * x / sum(w) for x in w]
+    for _ in range(n):                      # water-filling
+        short = [i for i, v in enumerate(out) if v < floor_ - 1e-9]
+        if not short:
+            break
+        need = sum(floor_ - out[i] for i in short)
+        donors = [i for i in range(n) if i not in short]
+        pool = sum(out[i] - floor_ for i in donors)
+        if pool <= need:
+            return [max_width / n] * n
+        for i in short:
+            out[i] = floor_
+        for i in donors:
+            out[i] -= need * (out[i] - floor_) / pool
+    return out
+
+
+def no_row_split(table):
+    """Forbid a row from breaking across a page (`w:cantSplit`).
+
+    Without it a tall cell straddles the break and the next page opens in the
+    middle of a sentence with no column labels - which `verify_tables.py`
+    reports as "continues with no repeated header", pointing at the header
+    rather than at the real cause."""
+    for row in table.rows:
+        trPr = row._tr.get_or_add_trPr()
+        if trPr.find(qn("w:cantSplit")) is None:
+            trPr.append(OxmlElement("w:cantSplit"))
+
+
 def add_journal_table(doc, rows, col_widths=None, header_rows=1, font_size=9,
                       font=DEFAULT_FONT, indent=0.12, group_space_before=0):
     """Append `rows` to `doc` as a journal-style table and return it.
 
     rows         list of lists of strings; rows[0] is the header
-    col_widths   inches per column. Always pass these: without them Word
-                 auto-fits and short columns (P, N) take room the labels need
+    col_widths   inches per column. Omitted -> col_widths_for(rows) computes
+                 them from content (labels get room, P/N columns stay snug).
+                 Pass explicitly only to override.
     header_rows  number of leading header rows (bolded, ruled under, repeated)
     indent       paragraph indent applied to rows whose label starts with two
                  spaces (Word collapses the spaces themselves)
@@ -319,6 +380,14 @@ def add_journal_table(doc, rows, col_widths=None, header_rows=1, font_size=9,
         set_row_bottom_rule(table.rows[header_rows - 1])
         for i in range(header_rows):
             repeat_header_row(table.rows[i])
+    if col_widths is None:
+        # 기본값(2026-09-09): 같은 파일의 col_widths_for() — "Always pass these"는
+        # 사람이 기억해야 하는 규칙이라 지켜지지 않았다. 명시적 인자가 언제나 이긴다.
+        # (국문 격자 표의 기본값은 col_widths.content_col_widths — 장르가 다르다.)
+        from col_widths import doc_text_width_cm
+        col_widths = col_widths_for(
+            [[str(c) for c in r] for r in rows],
+            max_width=doc_text_width_cm(doc) / 2.54)           # cm -> inches
     if col_widths:
         _set_col_widths(table, col_widths)
 
