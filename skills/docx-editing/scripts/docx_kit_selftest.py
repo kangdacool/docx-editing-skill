@@ -152,6 +152,30 @@ check("맨몸 Dispatch를 «쓰지 않는다»",
       "Dispatch는 떠 있는 인스턴스에 붙어 한 번 막히면 계속 실패한다")
 check("원본이 아니라 사본을 연다", "shutil.copy2" in src)
 
+print("\n=== 용지 -- 골격이 실제로 A4 를 내는가 ===")
+# 2026-09-10: python-docx 의 내장 서식은 US Letter 다. 이 랩의 «원고» 가 오래 Letter 로
+# 나가고 있었는데 같은 kit 의 brief_builder 는 이미 A4 였다 -- 형제끼리 어긋나 있었고,
+# 기본값이 되돌아가도 «종이에 뽑기 전까지» 아무도 모른다. 그래서 여기서 잡는다.
+from docx import Document as _Doc
+ds = (HERE / "document_shell.py").read_text(encoding="utf-8")
+check("document_shell 이 set_paper 를 갖는다", "def set_paper(" in ds)
+check("골격이 맨몸 Document() 를 «쓰지 않는다»", "doc = Document()" not in ds,
+      "맨몸 Document() 는 US Letter 를 만든다")
+check("두 골격 모두 paper 인자를 받는다", ds.count('paper="a4"') >= 2)
+try:
+    sys.path.insert(0, str(HERE))
+    from document_shell import set_paper
+    _s = set_paper(_Doc(), "a4").sections[0]
+    _mm = lambda v: round(v / 36000)
+    check("set_paper(a4) 가 210x297mm 를 만든다",
+          (_mm(_s.page_width), _mm(_s.page_height)) == (210, 297),
+          "실제: %sx%s mm" % (_mm(_s.page_width), _mm(_s.page_height)))
+    _body = (_s.page_width - _s.left_margin - _s.right_margin) / 914400
+    check("본문 폭이 6.5 인치로 유지된다", abs(_body - 6.5) < 0.01,
+          "표는 섹션 폭을 읽어 따라오지만 그림은 고정 폭으로 들어간다 -- 실제 %.2f in" % _body)
+except Exception as _e:
+    check("set_paper 가 동작한다", False, repr(_e))
+
 print()
 if fails:
     print(f"★ {len(fails)}건 실패: {', '.join(fails)}")

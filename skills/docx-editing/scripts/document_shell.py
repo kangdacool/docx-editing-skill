@@ -31,7 +31,7 @@ from pathlib import Path
 
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.shared import Inches, Pt
+from docx.shared import Inches, Mm, Pt
 
 from manuscript_table import add_journal_table
 from md_to_docx import render_markdown
@@ -129,10 +129,34 @@ def _load_sections(sections, values):
     return items
 
 
+# ── 용지 ────────────────────────────────────────────────────────────────────
+# python-docx 의 내장 서식은 US Letter 다. 이 랩의 종이는 A4 이고, 같은 kit 의
+# brief_builder.new_doc() 은 이미 A4 가 기본이다 -- 원고 골격만 어긋나 있었다
+# (2026-09-10 실측·수정). 좌우 여백은 1 인치가 아니라 «본문 폭 6.5 인치»를 유지하도록
+# 잡는다: 표는 col_widths_for 가 섹션 폭을 읽어 따라오지만, 그림은 호출부가 고정 폭
+# (Inches(6.5) 등)으로 넣으므로 본문 폭이 줄면 넘친다. 종이만 바꾸고 기하는 보존한다.
+PAPER_MM = {"a4": (210, 297), "letter": (215.9, 279.4), "a3": (297, 420)}
+BODY_W_IN = 6.5
+
+
+def set_paper(doc, paper="a4", body_width_in=BODY_W_IN, tb_margin_in=1.0):
+    """모든 섹션의 용지를 정하고, 본문 폭을 body_width_in 으로 고정한다."""
+    w_mm, h_mm = PAPER_MM[str(paper).lower()]
+    side = (w_mm / 25.4 - body_width_in) / 2.0
+    if side < 0.4:                       # 종이가 좁아 여백이 남지 않으면 본문을 줄인다
+        side = 0.5
+    for s in doc.sections:
+        s.page_width, s.page_height = Mm(w_mm), Mm(h_mm)
+        s.left_margin = s.right_margin = Inches(side)
+        s.top_margin = s.bottom_margin = Inches(tb_margin_in)
+    return doc
+
+
 # ── 골격 1: 원고 totale ────────────────────────────────────────────────────
 def manuscript_shell(out, title, sections, *, authors=None, abstract=None,
                      cover=None, tables=(), figures=(), values=None,
                      word_limit=None, no_count=(), subtitle=None,
+                     paper="a4",
                      table_caption="Table {i}. {caption}",
                      figure_caption="Figure {i}. {caption}"):
     """원고 totale 을 조립한다. 검토용 표지는 «쪽을 끊어» 붙으므로 투고 시 통째로 뺀다.
@@ -174,7 +198,7 @@ def manuscript_shell(out, title, sections, *, authors=None, abstract=None,
         raise GateError(f"본문이 {body_words - word_limit}단어 초과 "
                         f"({body_words}/{word_limit}). 절별: {per_section}")
 
-    doc = Document()
+    doc = set_paper(Document(), paper)
 
     if cover:
         render_markdown(doc, cover)
@@ -265,7 +289,8 @@ def _add_page_numbers(doc):
 
 
 # ── 골격 2: 국문 브리프·사례보고서 ─────────────────────────────────────────
-def brief_shell(out, title, blocks, *, subtitle=None, values=None, footer=None):
+def brief_shell(out, title, blocks, *, subtitle=None, values=None, footer=None,
+                paper="a4"):
     """국문 브리프. 격자·색 헤더가 «의도된» 디자인인 장르다(저널 표를 쓰지 않는다).
 
     blocks: 순서대로 배치할 목록. 각 항목은
@@ -277,7 +302,7 @@ def brief_shell(out, title, blocks, *, subtitle=None, values=None, footer=None):
     """
     from brief_builder import data_table                    # 순환 import 회피
 
-    doc = Document()
+    doc = set_paper(Document(), paper)
     p = doc.add_paragraph()
     r = p.add_run(title)
     r.bold = True
