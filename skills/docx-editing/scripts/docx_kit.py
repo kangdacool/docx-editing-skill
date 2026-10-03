@@ -67,7 +67,24 @@ from document_shell import (GateError, brief_shell,                 # noqa: E402
 __all__ = ["add_runs", "unwrap", "render_markdown", "manuscript_typography",
            "add_journal_table", "content_col_widths", "doc_text_width_cm",
            "render_docx", "page_count", "brief_table",
-           "manuscript_shell", "brief_shell", "fill_values", "GateError"]
+           "manuscript_shell", "brief_shell", "fill_values", "GateError", "finalize_docx"]
+
+
+def finalize_docx(path, author="Kang Seo"):
+    """⛔ 사람에게 넘기는 모든 .docx 의 «마지막 단계» — Word(새 프로세스)로 열어 그대로 다시 저장한다.
+
+    연구자 지시(2026-10-02): 「앞으로도 word 재저장을 꼭 해라. 모든 연구 파이프라인 산출물 규칙으로」.
+    python-docx 의 기본 템플릿은 저장 파일에 남의 흔적을 남긴다 — 실측:
+      app.xml  Application=「Microsoft Macintosh Word」 · AppVersion 14 · 단어/문단 수 0
+      docProps/thumbnail.jpeg  템플릿에 딸려 온 남의 썸네일
+    core.xml 의 creator 를 고쳐도 이것들은 남는다(audit_doc_properties 는 core 만 본다).
+    Word 로 재저장하면 이 PC 의 Word 값(16.0 · 실제 단어 수)이 되고 썸네일이 빠진다.
+    실제 일은 `agent/tools/office_finalize.py` 가 한다(.pptx·.xlsx 도 같은 문 — 길은 하나).
+    내용이 재저장 전후로 다르면 원본을 그대로 두고 멈춘다.
+    """
+    sys.path.insert(0, r"D:\onedrive\claude\agent\tools")
+    from office_finalize import finalize
+    return finalize(str(Path(path).resolve()), author)
 
 
 def brief_table(*a, **k):

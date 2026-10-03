@@ -176,6 +176,15 @@ try:
 except Exception as _e:
     check("set_paper 가 동작한다", False, repr(_e))
 
+# 두 패널 표: 띠 줄의 «안쪽» P 값을 병합이 덮지 «않는다»(2026-10-02 face_mci Table 1 소득 P 0.670 사고)
+_d3 = Document()
+_t3 = add_journal_table(_d3, [["Characteristic", "T1", "T2", "P", "T1", "T2", "P"],
+                              ["Income", "", "", "0.670", "", "", "0.250"],
+                              ["  <100", "1", "2", "", "3", "4", ""]],
+                        col_widths=[1.5, .8, .8, .6, .8, .8, .6])
+_c3 = [c.text for c in _t3.rows[1].cells]
+check("안쪽 P 열 값을 띠 줄 병합이 지우지 «않는다»", "0.670" in _c3 and "0.250" in _c3, f"실제: {_c3}")
+
 print()
 if fails:
     print(f"★ {len(fails)}건 실패: {', '.join(fails)}")

@@ -46,6 +46,10 @@ from docx_kit import render_markdown, add_journal_table, brief_table, render_doc
 국문·격자 표 = `col_widths.content_col_widths`(CJK 표시폭·균등 유지 판정). 장르가 달라
 **합치지 말 것** — 판정 근거는 `scripts/col_widths.py` 머리말.
 
+⚠ **이미 있는 표를 «낮게» 다시 짤 때는 `scripts/min_height_widths.py`** — 글꼴 폭으로 칸마다 줄 수를
+재서 «표 높이 최소 · 토큰 중간 끊김 0» 폭을 고른다(여러 표 공통 폭·열 고정 가능). 사람이 높이를 줄이려고
+폭을 손으로 좁히다 「번/호」를 끊은 데서 나왔다(2026-09-15). 적용 전 `--probe` 줄 수를 렌더와 두세 칸 맞춘다.
+
 > *(내력)* 2026-08-25까지 이 코드는 스킬 밖의 공용 도구 폴더에 있었다. 형제(hwpx·pptx)와 달랐고, 그래서
 > 못 찾아 다시 짰다. 옛 경로에는 **얇은 shim만** 남아 있다(기존 import 보호용) —
 > 새 코드는 위 경로로 직접 가져온다.
@@ -70,6 +74,13 @@ from docx_kit import render_markdown, add_journal_table, brief_table, render_doc
 *"학회용 초록파일 작성은 원고처럼 작성해. 앞으로도."*). Heading 은 글꼴을 «테마»로 참조하므로
 그 함수가 테마 속성을 먼저 지운다 — 안 지우면 본문만 바뀌고 제목은 산세리프로 남는다.
 ⛔ 접수 절차·분량 규정 같은 «작업 메모»를 초록 파일 표면에 남기지 않는다. 그대로 첨부돼 나간다.
+
+⭐ **모든 .docx 산출물에 쪽 번호가 있어야 한다**(2026-09-22 사용자 지시: *"모든 워드 산출물에
+넣어둬"* — 인쇄한 읽기가이드를 교재 옆에 두고 읽는데 지금 몇 쪽인지 알 수 없었다).
+`manuscript_typography()` 가 `md_to_docx.add_page_numbers()` 를 부르므로 그 경로는 자동이다.
+골격(`manuscript_shell`·`brief_shell`)도 같은 함수를 쓴다. **둘 다 안 쓰는 빌더는
+`add_page_numbers(doc)` 를 직접 부르고, 저장 전 `has_page_numbers(doc)` 로 확인한다.**
+두 번 불려도 한 번만 들어간다.
 
 ⚠️ 「보기 좋으니까」로 고르지 않는다. **원고에 격자 표를 넣으면 저널 관습 위반이고,
 브리프에 저널 표를 넣으면 밋밋해 보이는 게 아니라 정보가 덜 보인다.**
@@ -113,6 +124,18 @@ render_docx("out/문서.docx", "scratch/_render")     # PNG 쪽별
 조판 결함(글씨 축소·쪽 넘김·칸 밖으로 나간 글자·별표가 글자로 남음)은 **구조 검사로
 안 잡히고 렌더에서만 보인다.** 2026-08-25에 이 단계가 6종을 잡았다.
 
+## 4½. ⛔ 넘기기 전 마지막 단계 — Word 재저장 (모든 .docx, 예외 없음)
+
+```python
+finalize_docx("out/문서.docx", author="Kang Seo")   # Word(DispatchEx)로 열어 그대로 다시 저장
+```
+
+연구자 지시(2026-10-02): 「앞으로도 word 재저장을 꼭 해라. 모든 연구 파이프라인 산출물 규칙으로」.
+python-docx 로 만든 파일은 core 속성을 고쳐도 `app.xml` 에 «Microsoft Macintosh Word · 단어 수 0»과
+템플릿 썸네일이 남는다 — 사람이 Word 로 만든 파일이 아니라는 지문이다. 재저장하면 사라진다.
+`audit_doc_properties.py` 가 이 지문을 결함으로 잡는다. 빌더의 `doc.save()` 바로 뒤에 둔다.
+실제 일은 `agent/tools/office_finalize.py` 가 한다 — .pptx·.xlsx 도 같은 함수(`finalize`)로 재저장한다.
+
 ## 5. 끝나면 감사
 
 조판 감사는 이 스킬 «밖»에 있다 — 하나의 진입점이 장르(docx·pptx·hwpx·md)로 라우팅하고,
@@ -131,7 +154,8 @@ python agent/tools/audit.py <파일>       # 없으면 이 절은 건너뛴다
 ## 더 읽을 것
 
 - **`references/docx-conventions.md`** — 저널 표 규칙, 마크다운→docx 결함 넷, 그림 크기,
-  렌더 함정(`Dispatch`/`DispatchEx`), 숫자 게이트. *직접 조립해야 할 때 여는 문서.*
+  렌더 함정(`Dispatch`/`DispatchEx`), 숫자 게이트, **§8 원고 빌드 조판 스펙**(표 폰트 상수·Table 1
+  패턴·빈 단락 vs `space_after`·섹션 간격·쪽번호 필드·totale 조립). *직접 조립해야 할 때 여는 문서.*
 - `scripts/docx_kit.py` 머리말 — 각 함수의 쓰는 법과 그것이 막는 실패.
 
 ## 자기검사

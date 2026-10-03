@@ -18,15 +18,17 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Pt, RGBColor
 
-INLINE = re.compile(r"(\*\*.+?\*\*|`.+?`|\*[^*]+?\*)")
+INLINE = re.compile(r"(\*\*.+?\*\*|`.+?`|\*[^*]+?\*|\^[^^\s]+?\^)")
 
 
 def add_runs(par, text):
-    """Render **bold**, `code` and *italic* inside one paragraph."""
+    """Render **bold**, `code`, *italic* and ^superscript^ (pandoc 표기 — 위첨자 인용번호, 2026-10-02) inside one paragraph."""
     for piece in INLINE.split(text):
         if not piece:
             continue
-        if piece.startswith("**") and piece.endswith("**"):
+        if piece.startswith("^") and piece.endswith("^") and len(piece) > 2:
+            par.add_run(piece[1:-1]).font.superscript = True
+        elif piece.startswith("**") and piece.endswith("**"):
             par.add_run(piece[2:-2]).bold = True
         elif piece.startswith("`") and piece.endswith("`"):
             r = par.add_run(piece[1:-1])
@@ -144,6 +146,48 @@ def manuscript_typography(doc, font="Times New Roman", size=11):
             _set(doc.styles["Heading %d" % lvl], pt, bold=True, space_before=8, space_after=3)
         except KeyError:
             pass
+    add_page_numbers(doc, size=min(size, 9))
+    return doc
+
+
+def has_page_numbers(doc):
+    """어느 섹션 바닥글에든 PAGE 필드가 있으면 True."""
+    for sec in doc.sections:
+        for p in sec.footer.paragraphs:
+            for it in p._p.iter(qn("w:instrText")):
+                if it.text and "PAGE" in it.text.upper():
+                    return True
+    return False
+
+
+def add_page_numbers(doc, size=9):
+    """모든 쪽 하단 중앙에 «쪽 / 전체». 두 번 불려도 한 번만 넣는다.
+
+    2026-09-22 사용자 지시: *"모든 워드 산출물에 넣어둬"* — 읽기가이드를 인쇄해 교재 옆에
+    두고 읽다가 「지금 몇 쪽인가」를 알 수 없었다. 그 전(2026-09-03)엔 브리프·원고 골격에만
+    있었고(`document_shell`) 마크다운 → docx 경로에는 없었다.
+    `manuscript_typography()` 가 부르므로 그것을 쓰는 빌더는 따로 할 일이 없다.
+    빌더가 `manuscript_typography` 를 안 쓴다면 이 함수를 직접 부른다.
+    """
+    if has_page_numbers(doc):
+        return doc
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    def _field(par, instr):
+        run = par.add_run()
+        b = OxmlElement("w:fldChar"); b.set(qn("w:fldCharType"), "begin")
+        i = OxmlElement("w:instrText"); i.set(qn("xml:space"), "preserve"); i.text = instr
+        e = OxmlElement("w:fldChar"); e.set(qn("w:fldCharType"), "end")
+        run._r.append(b); run._r.append(i); run._r.append(e)
+        run.font.size = Pt(size)
+        return run
+
+    fp = doc.sections[0].footer.paragraphs[0]
+    fp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    _field(fp, "PAGE")
+    mid = fp.add_run(" / ")
+    mid.font.size = Pt(size)
+    _field(fp, "NUMPAGES")
     return doc
 
 

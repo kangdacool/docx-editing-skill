@@ -393,10 +393,15 @@ def add_journal_table(doc, rows, col_widths=None, header_rows=1, font_size=9,
 
     # merge last: merging rewrites a row's cell list, so widths must be set first
     for i in group_rows:
-        if merge_to <= 0:
+        # 띠 줄이 «안쪽» P 열에 값을 실으면(두 패널 표: 정상 P | MCI P) 그 칸 앞에서 병합을 멈춘다.
+        # 2026-10-02 face_mci Table 1: 오른쪽 끝 P 만 피하던 병합이 정상군 소득 P(0.670)를 덮어 지웠다.
+        row = rows[i]
+        filled = [j for j in range(1, ncols) if j < len(row) and str(row[j]).strip()]
+        stop = min(merge_to, filled[0] - 1) if filled else merge_to
+        if stop <= 0:
             continue
         cells = table.rows[i].cells
-        merged = cells[0].merge(cells[merge_to])
+        merged = cells[0].merge(cells[stop])
         # merge() concatenates the paragraphs of every cell it absorbs, so the
         # merged cell inherits one empty paragraph per column and the row
         # balloons to several lines tall. Keep only the label's paragraph.

@@ -134,6 +134,10 @@ render_docx("out/manuscript.docx", "scratch/_render")              # 쪽별 PNG 
 4. **만들었으면 렌더해서 눈으로 본다.** 글씨 축소·쪽 넘김·표 잘림·별표 잔존은 구조 검사로
    안 잡히고 렌더에서만 보인다.
 
+넘기기 전 마지막 단계는 **Word 로 다시 저장**입니다 — python-docx 가 문서 속성에 남기는 지문
+(`Microsoft Macintosh Word`, 단어 수 0)을 지우고, 저장 전후 문단을 대조해 내용이 바뀌면 되돌립니다
+(`SKILL.md` 4½절).
+
 자세한 근거와 함정은 [`references/docx-conventions.md`](skills/docx-editing/references/docx-conventions.md).
 
 ### 자기검사
@@ -211,6 +215,10 @@ the same layout shows up three times or more — not on a guess.
    unsubstituted placeholder. Row *selectors* (model labels and the like) are numbers too.
 4. **Render it and look.** Shrunken text, bad page breaks, clipped tables and leftover asterisks are
    invisible to structural checks.
+
+Last step before handing over: **re-save through Word.** It strips the fingerprint python-docx
+leaves in the document properties (`Microsoft Macintosh Word`, zero words) and diffs paragraphs
+before/after, reverting if the content changed (`SKILL.md` §4½).
 
 See [`references/docx-conventions.md`](skills/docx-editing/references/docx-conventions.md).
 

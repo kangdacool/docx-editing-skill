@@ -135,3 +135,59 @@ nrm.space_after = Pt(0); nrm.space_before = Pt(0); nrm.line_spacing = 1.0
 그때 **표 칸수를 함께 본다**: 표가 2개인 문서와 20개인 문서는 쪽수를 비교할 사이가 아니다.
 (같은 날 실측: 5쪽짜리 «동료 문서» 셋을 21쪽 문서 옆에 놓았는데 그것들은 골격이 다른
 옛 서식이었다. 「우리 것이 너무 길다」는 거짓 결론이 그 표에서 나왔다.)
+
+## 8. 원고 빌드 조판 스펙
+
+(2026-09-16 드레인: `agent/feedback/manuscript_rules.md` 「문서 빌드 (조판 스펙)」에서 이관.
+그 파일은 «무엇을 쓰는가»를 다루고, 조립 기계는 여기 있다. flextable·officer 의 R 쪽 함정은
+[[r-technical-gotchas]] 로 먼저 나갔다.)
+
+**표 서식 (flextable + officer).** 폰트 상수를 스크립트 상단에: `BODY_PT 10 / HEADER_PT 11 /
+FN_PT 9`(Table 1 은 9/10 가능).
+- Table 1 카테고리 헤더 **bold** + 하위 항목 **2칸 들여쓰기**.
+- **Table 1 categorical 은 예외 없이 같은 패턴(NON-NEGOTIABLE)** — 2레벨이든 5레벨이든
+  `헤더행 + 들여쓴 하위행`. Binary 를 한 줄로 축약하지 않는다. 리뷰어가 즉시 불일치로 지적한다.
+- 5열 이하 portrait, 6열 이상 landscape.
+- officer `body_add_par(style="Normal")` 은 템플릿 기본값에 기댄다 → **`fp_text(font.size=BODY_PT)`
+  + `body_add_fpar()` 로 명시**. 페이지 브레이크는 `body_add_break(doc)`(value 파라미터 없음).
+
+**DOCX 편집 가능성 (NON-NEGOTIABLE).** 표·그림·캡션 뒤에 **Normal 스타일 빈 단락**을 넣는다
+(표 안에서 엔터 → 행 추가, 헤딩에서 엔터 → 헤딩 생성. 둘 다 사용자의 의도가 아니다).
+**white/invisible 텍스트로 gap 을 만들지 않는다** — 클릭·편집이 안 된다.
+- ⚠ **표 각주·그림 캡션 «뒤»의 간격은 빈 단락이 아니라 `space_after`(≈16pt)로.** literal 빈 단락은
+  물리적 콘텐츠라 페이지 경계에서 **새 페이지 최상단의 orphan 빈 줄**로 남는다. `space_after` 는
+  Word 가 페이지 브레이크에서 자동으로 collapse 한다.
+- python-docx 에서 `\n\n` 으로 빈 줄을 만들지 않는다. 문단 분리는 별도 `add_para()`.
+- 한글 글리프(`rFonts eastAsia`)·열 폭·행 쪼개짐·헤더 반복·셀 여백은 **모듈이 한다**
+  (`scripts/manuscript_table.py`). 손으로 짜면 그 함정을 다시 만난다.
+
+**조립 원고 섹션 간격 (고정 규약).** Abstract→Introduction **2**줄, IMRaD 섹션 사이 **1**줄,
+Conclusion→back-matter **2**, References 앞 **2**, Tables→Figures **1**.
+`GAP_AFTER = {"01_abstract.md":2, "02_introduction.md":1, ...}` 후 `for _ in range(...): gap(doc)`.
+표지도 같은 규약(affiliations 뒤 1, ORCID 앞 1). **.md 에서 실제 빈 단락을 강제하려면 `[[BLANK]]`
+블록**을 쓴다(render_section 이 `\n\n` 을 블록 구분자로만 처리하므로).
+
+🔴 **쪽 번호는 «모든» 산출물에 박는다** (2026-09-03 연구자 지시: 「모든 파이프라인 규칙으로」).
+서식이 아니라 **기능**이다 — 없으면 「12쪽 셋째 문단」이라는 피드백의 기본 단위가 성립하지 않고,
+낱장으로 흩어지면 순서를 복원할 수 없다.
+- ⛔ **정적 숫자 금지** — `PAGE`/`NUMPAGES` **필드**로. 「3 / 41」이면 낱장 누락까지 보인다.
+- ⚠ **절을 새로 열면 푸터가 안 따라온다**(가로/세로 혼합 문서에서 실제로 끊긴다) —
+  `footer.is_linked_to_previous = False` 후 절마다 다시 단다.
+  구현 = `자체충족률논문/R/13_docx.py::page_numbers()`.
+
+**Manuscript totale.** 본문 md 파싱 + **표는 xlsx 에서 읽어 재조립(손타이핑 절대 금지, §6)** +
+main figure 1:1 + 전체 supplement. 표지에 **target journal 명시**. 빌드 스크립트 보존.
+- **인용 마커(`^N^`) 절대 strip 금지.** caret 만 지우면 "STROBE guidelines.9" 처럼 벌거벗은 숫자가
+  단어에 붙는다. **먼저 `m^2^`→`m²` 로 단위를 보호**한 뒤 나머지만 변환하고, **word·md 두 빌더에
+  똑같이 적용**한다(한쪽만 고치면 다른 산출물에 남는다).
+- Figure 번호는 본문 콜아웃 ↔ 파일명 drift 가 흔하다 — 조립 전 grep 대조(본문 Fig1=forest 인데
+  파일 Fig1=study_design 이던 실사고).
+
+**변경 강조본(highlighted).** 바뀐 **문장만** 표시한다. 문단 전체 강조는 과잉표시다(숫자 하나
+바뀐 문단이 통째로 켜진다). 제출본 전체 문장의 **GLOBAL 집합**을 만들고(이동했지만 안 바뀐
+텍스트가 재표시되지 않게), 개정본 문단을 문장으로 쪼개 그 집합에 없는 것만 강조. 강조 run
+**개수**는 늘 수 있다(문장 단위로 쪼개지므로) — 표시된 **텍스트**는 줄어든다.
+
+**표·섹션을 다음 페이지로 밀 때는 하드 브레이크가 아니라 빈 줄**(연구자 선호). N 을 추측하지
+말고 **PDF 로 렌더해 측정**한다 — 11pt/1.4 기준 빈 줄 ≈ **15.3 pt**. ⚠ 위쪽 내용이 바뀌면 N 이
+깨지므로 재측정한다. N 은 env 로 덮어쓸 수 있게 둔다.
