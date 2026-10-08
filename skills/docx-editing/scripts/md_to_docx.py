@@ -151,11 +151,20 @@ def manuscript_typography(doc, font="Times New Roman", size=11):
 
 
 def has_page_numbers(doc):
-    """어느 섹션 바닥글에든 PAGE 필드가 있으면 True."""
+    """어느 섹션 바닥글에든 PAGE 필드가 있으면 True.
+
+    필드는 두 모양이다 — 복합 필드(`w:instrText`)와 간단 필드(`w:fldSimple w:instr="PAGE"`).
+    Word 로 직접 만든 문서의 바닥글은 간단 필드일 수 있다(2026-10-08: 연구자가 Word 로 쓴 계획서를
+    틀로 복제한 빌더 두 개에서 False). 이 함수는 add_page_numbers 의 중복 방지 가드라, False 면
+    같은 바닥글 문단에 «1 / 3» 이 한 번 더 붙는다. Word 로 재저장하면 복합 필드로 바뀐다.
+    """
     for sec in doc.sections:
         for p in sec.footer.paragraphs:
             for it in p._p.iter(qn("w:instrText")):
                 if it.text and "PAGE" in it.text.upper():
+                    return True
+            for fs in p._p.iter(qn("w:fldSimple")):
+                if "PAGE" in (fs.get(qn("w:instr")) or "").upper():
                     return True
     return False
 

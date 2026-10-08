@@ -185,6 +185,19 @@ _t3 = add_journal_table(_d3, [["Characteristic", "T1", "T2", "P", "T1", "T2", "P
 _c3 = [c.text for c in _t3.rows[1].cells]
 check("안쪽 P 열 값을 띠 줄 병합이 지우지 «않는다»", "0.670" in _c3 and "0.250" in _c3, f"실제: {_c3}")
 
+# 간단 필드(w:fldSimple) 쪽 번호도 «있다»고 본다 — 없다고 보면 add_page_numbers 가 한 번 더 붙인다(2026-10-08)
+from md_to_docx import has_page_numbers, add_page_numbers
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn as _qn
+_d4 = Document()
+_fs = OxmlElement("w:fldSimple"); _fs.set(_qn("w:instr"), " PAGE ")
+_d4.sections[0].footer.paragraphs[0]._p.append(_fs)
+_before = _d4.sections[0].footer._element.xml
+add_page_numbers(_d4)
+check("간단 필드 PAGE 를 쪽 번호로 본다", has_page_numbers(_d4))
+check("간단 필드가 있으면 쪽 번호를 «또» 넣지 않는다", _d4.sections[0].footer._element.xml == _before)
+check("쪽 번호가 없으면 없다고 본다", not has_page_numbers(Document()))
+
 print()
 if fails:
     print(f"★ {len(fails)}건 실패: {', '.join(fails)}")
